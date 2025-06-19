@@ -1,0 +1,15 @@
+# Ignorar archivos sensibles
+appsettings.json
+appsettings.Development.json
+
+# Archivos de compilación
+bin/
+obj/
+
+# Configuración de usuario
+*.user
+*.suo
+
+# Visual Studio
+.vs/
+.vscode/
