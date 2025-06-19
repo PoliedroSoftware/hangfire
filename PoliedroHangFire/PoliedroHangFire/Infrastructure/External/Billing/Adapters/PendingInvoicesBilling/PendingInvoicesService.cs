@@ -4,13 +4,10 @@ using System.Text.Json;
 
 namespace PoliedroHangFire.Infrastructure.External.Billing.Adapters.PendingInvoicesBilling;
 
-public class PendingInvoicesService : IPendingInvoicesBilling
+public class PendingInvoicesService(HttpClient httpClient) : IPendingInvoicesBilling
 {
-    private readonly HttpClient _httpClient;
-    public PendingInvoicesService(HttpClient httpClient)
-    {
-        _httpClient = httpClient;
-    }
+    private readonly HttpClient _httpClient = httpClient;
+
     public async Task InvoicePendingAsync(int clienteId, string token, bool resolutionType, string name)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"https://wc9oqtphb5.execute-api.us-east-2.amazonaws.com/billing/api/v1/invoicespendingwithdetails");
