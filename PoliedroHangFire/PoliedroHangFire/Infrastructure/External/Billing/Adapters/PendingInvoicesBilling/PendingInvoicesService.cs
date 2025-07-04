@@ -10,6 +10,7 @@ public class PendingInvoicesService(HttpClient httpClient) : IPendingInvoicesBil
 
     public async Task InvoicePendingAsync(int clienteId, string token, bool resolutionType, string name)
     {
+        _httpClient.DefaultRequestHeaders.Add("X-Environment", "staging-billing");
         var request = new HttpRequestMessage(HttpMethod.Get, $"https://wc9oqtphb5.execute-api.us-east-2.amazonaws.com/billing/api/v1/invoicespendingwithdetails");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         request.Content = new StringContent(JsonSerializer.Serialize(new
