@@ -2,13 +2,10 @@
 using System.Text.Json;
 
 namespace PoliedroHangFire.Infrastructure.External.Billing.Adapters.ClientBilling;
-public class ClientService : IClientService
+public class ClientService(HttpClient httpClient) : IClientService
 {
-    private readonly HttpClient _httpClient;
-    public ClientService(HttpClient httpClient)
-    {
-        _httpClient = httpClient;
-    }
+    private readonly HttpClient _httpClient = httpClient;
+
     public async Task<List<Domain.ClientBilling.Entities.ClientBilling>> GetClientBillingsAsync()
     {
         var response = await _httpClient.GetAsync("https://wc9oqtphb5.execute-api.us-east-2.amazonaws.com/billing/api/v1/client");
