@@ -13,7 +13,7 @@ builder.Services.AddHttpClient<IClientService, ClientService>();
 builder.Services.AddTransient<IPendingInvoicesBilling, PendingInvoicesService>();
 
 builder.Services.AddHangfire(config => {
-    var connectionString = builder.Configuration.GetConnectionString("HangfireConnection");
+    var connectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION") ?? builder.Configuration.GetConnectionString("HangfireConnection");
     config.UseSimpleAssemblyNameTypeSerializer()
           .UseRecommendedSerializerSettings()
           .UseStorage(new MySqlStorage(connectionString, new MySqlStorageOptions
