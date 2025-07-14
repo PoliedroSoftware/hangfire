@@ -1,6 +1,6 @@
 # Ignorar archivos sensibles
 #appsettings.json
-#appsettings.Development.json
+appsettings.Development.json
 
 # Archivos de compilación
 bin/
