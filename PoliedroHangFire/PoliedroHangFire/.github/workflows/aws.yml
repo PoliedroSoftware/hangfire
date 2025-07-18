@@ -1,0 +1,169 @@
+name: Build, Test, Deploy to ECS
+
+on:
+  push:
+    branches:
+      - feature/test-github-actions
+
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+      - 'release/*'
+      - 'releasecandidate/*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  dotnet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup .NET & Restore
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Unit Tests
+        run: dotnet test --configuration Release --no-build
+
+  sonar:
+    needs: dotnet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
+        with:
+          args: >
+            -Dsonar.projectKey=PoliedroSoftware_backend-api-eds
+            -Dsonar.organization=poliedro-software-sonarqube
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  docker:
+    if: github.event.pull_request.merged == true
+    needs: [dotnet, sonar]
+    runs-on: ubuntu-latest
+    environment: QA
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set AWS region
+        run: |
+          echo "Configurando región AWS..."
+          aws configure set region ${{ secrets.AWS_REGION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build Docker image
+        run: |
+          echo "Construyendo imagen Docker..."
+          docker build -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_HANGFIRE_REPOSITORY }}:latest .
+
+      - name: Tag Docker image
+        run: |
+          echo "Etiquetando imagen Docker..."
+          docker tag ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_HANGFIRE_REPOSITORY }}:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_HANGFIRE_REPOSITORY }}:latest
+
+      - name: Push Docker image to ECR
+        run: |
+          echo "Subiendo imagen Docker a ECR..."
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_HANGFIRE_REPOSITORY }}:latest    
+
+  docker-hub:
+    if: github.event.pull_request.merged == true
+    needs: [dotnet, sonar]
+    runs-on: ubuntu-latest
+    environment: QA
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME_HANGFIRE }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image to Docker Hub
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME_HANGFIRE }}/${{ secrets.DOCKERHUB_REPOSITORY_HANGFIRE }}:latest
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME_HANGFIRE }}/${{ secrets.DOCKERHUB_REPOSITORY_HANGFIRE }}:buildcache
+          cache-to: type=inline
+
+  deploy:
+    if: github.event.pull_request.merged == true
+    needs: docker
+    runs-on: ubuntu-latest
+    environment: QA
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to Amazon ECS
+        run: |
+          # Usar el ARN de la task definition desde Secrets
+          ecs_task_definition_arn="${{ secrets.TASK_DEFINITION_ARN_HANGFIRE }}"
+          echo "Usando el ARN de la task definition: $ecs_task_definition_arn"
+          
+          # Forzar la actualización del servicio con la task definition existente
+          ecs_deploy=$(aws ecs update-service \
+            --cluster ${{ secrets.AWS_ECS_CLUSTER }} \
+            --service ${{ secrets.AWS_ECS_HANGFIRE_SERVICE }} \
+            --task-definition $ecs_task_definition_arn \
+            --force-new-deployment)
+          
+          echo "Resultado del despliegue en ECS: $ecs_deploy"
+
+      - name: Check ECS Service Status
+        run: |
+          echo "Verificando estado del servicio ECS..."
+          service_status=$(aws ecs describe-services \
+            --cluster ${{ secrets.AWS_ECS_CLUSTER }} \
+            --services ${{ secrets.AWS_ECS_HANGFIRE_SERVICE }} \
+            --query 'services[0].status' --output text)
+          
+          echo "Estado del servicio: $service_status"
+
+      - name: Check ECS Task Definition
+        run: |
+          echo "Verificando imagen de la task definition..."
+          task_definition_image=$(aws ecs describe-task-definition \
+            --task-definition ${{ secrets.TASK_DEFINITION_ARN_HANGFIRE }} \
+            --query 'taskDefinition.containerDefinitions[0].image' --output text)
+          
+          echo "Imagen de la task definition: $task_definition_image"
