@@ -3,7 +3,7 @@ name: Build, Test, Deploy to ECS
 on:
   push:
     branches:
-      - feature/test-github-actions
+      - Feature/test-github-actions
 
   pull_request:
     types: [opened, synchronize, reopened, closed]
@@ -24,7 +24,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Setup .NET & Restore
+      - name: Setup .NET & Restor
         uses: actions/setup-dotnet@v2
         with:
           dotnet-version: '8.0.x'
