@@ -24,7 +24,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Setup .NET & Restor
+      - name: Setup .NET & Restore
         uses: actions/setup-dotnet@v2
         with:
           dotnet-version: '8.0.x'
@@ -59,20 +59,8 @@ jobs:
     environment: QA
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Set AWS region
-        run: |
-          echo "Configurando región AWS..."
-          aws configure set region ${{ secrets.AWS_REGION }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+      - name: AWS setup
+        uses: ./.github/actions/aws-setup
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v1
@@ -127,12 +115,8 @@ jobs:
     environment: QA
 
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+      - name: AWS setup
+        uses: ./.github/actions/aws-setup
 
       - name: Deploy to Amazon ECS
         run: |
