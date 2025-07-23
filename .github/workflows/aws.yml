@@ -47,7 +47,7 @@ jobs:
         uses: SonarSource/sonarcloud-github-action@v2
         with:
           args: >
-            -Dsonar.projectKey=PoliedroSoftware_backend-api-eds
+            -Dsonar.projectKey=PoliedroSoftware_hangfire
             -Dsonar.organization=poliedro-software-sonarqube
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -67,17 +67,17 @@ jobs:
 
       - name: Build Docker image
         run: |
-          echo "Construyendo imagen Docker..."
+          echo "Building Docker image..."
           docker build -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_HANGFIRE_REPOSITORY }}:latest .
 
       - name: Tag Docker image
         run: |
-          echo "Etiquetando imagen Docker..."
+          echo "Tagging Docker image..."
           docker tag ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_HANGFIRE_REPOSITORY }}:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_HANGFIRE_REPOSITORY }}:latest
 
       - name: Push Docker image to ECR
         run: |
-          echo "Subiendo imagen Docker a ECR..."
+          echo "Pushing Docker image to ECR..."
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_HANGFIRE_REPOSITORY }}:latest    
 
   docker-hub:
@@ -120,34 +120,34 @@ jobs:
 
       - name: Deploy to Amazon ECS
         run: |
-          # Usar el ARN de la task definition desde Secrets
+          # Use the task definition ARN from Secrets
           ecs_task_definition_arn="${{ secrets.TASK_DEFINITION_ARN_HANGFIRE }}"
-          echo "Usando el ARN de la task definition: $ecs_task_definition_arn"
+          echo "Using task definition ARN: $ecs_task_definition_arn"
           
-          # Forzar la actualización del servicio con la task definition existente
+          # Force service update with the existing task definition
           ecs_deploy=$(aws ecs update-service \
             --cluster ${{ secrets.AWS_ECS_CLUSTER }} \
             --service ${{ secrets.AWS_ECS_HANGFIRE_SERVICE }} \
             --task-definition $ecs_task_definition_arn \
             --force-new-deployment)
           
-          echo "Resultado del despliegue en ECS: $ecs_deploy"
+          echo "ECS deployment result: $ecs_deploy"
 
       - name: Check ECS Service Status
         run: |
-          echo "Verificando estado del servicio ECS..."
+          echo "Checking ECS service status..."
           service_status=$(aws ecs describe-services \
             --cluster ${{ secrets.AWS_ECS_CLUSTER }} \
             --services ${{ secrets.AWS_ECS_HANGFIRE_SERVICE }} \
             --query 'services[0].status' --output text)
           
-          echo "Estado del servicio: $service_status"
+          echo "Service status: $service_status"
 
       - name: Check ECS Task Definition
         run: |
-          echo "Verificando imagen de la task definition..."
+          echo "Checking task definition image..."
           task_definition_image=$(aws ecs describe-task-definition \
             --task-definition ${{ secrets.TASK_DEFINITION_ARN_HANGFIRE }} \
             --query 'taskDefinition.containerDefinitions[0].image' --output text)
           
-          echo "Imagen de la task definition: $task_definition_image"
+          echo "Task definition image: $task_definition_image"
