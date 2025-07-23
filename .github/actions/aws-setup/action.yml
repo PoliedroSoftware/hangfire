@@ -1,5 +1,5 @@
 name: AWS Setup Composite
-description: Realiza checkout y configura credenciales AWS
+description: Performs checkout and configures AWS credentials
 
 runs:
   using: "composite"
