@@ -1,12 +1,9 @@
 name: AWS Setup Composite
-description: Performs checkout and configures AWS credentials
+description: configure AWS credentials
 
 runs:
   using: "composite"
   steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
