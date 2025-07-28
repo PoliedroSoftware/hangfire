@@ -53,6 +53,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   docker:
+    if: github.event.pull_request.merged == true
     needs: [dotnet, sonar]
     runs-on: ubuntu-latest
     environment: QA
