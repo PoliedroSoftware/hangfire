@@ -53,6 +53,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   docker:
+    if: github.event.pull_request.merged == true
     needs: [dotnet, sonar]
     runs-on: ubuntu-latest
     environment: QA
@@ -92,6 +93,7 @@ jobs:
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_HANGFIRE_REPOSITORY }}:latest    
 
   docker-hub:
+    if: github.event.pull_request.merged == true
     needs: [dotnet, sonar]
     runs-on: ubuntu-latest
     environment: QA
@@ -119,6 +121,7 @@ jobs:
           cache-to: type=inline
 
   deploy:
+    if: github.event.pull_request.merged == true
     needs: docker
     runs-on: ubuntu-latest
     environment: QA
