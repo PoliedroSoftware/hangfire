@@ -10,6 +10,17 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <Compile Remove="Infrastructure\Persistence\**" />
+	  <Compile Remove="Infrastructure\Resource\**" />
+	  <Content Remove="Infrastructure\Persistence\**" />
+	  <Content Remove="Infrastructure\Resource\**" />
+	  <EmbeddedResource Remove="Infrastructure\Persistence\**" />
+	  <EmbeddedResource Remove="Infrastructure\Resource\**" />
+	  <None Remove="Infrastructure\Persistence\**" />
+	  <None Remove="Infrastructure\Resource\**" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<Content Update="appsettings.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
@@ -32,8 +43,6 @@
 		<Folder Include="Application\ClientBilling\Services\" />
 		<Folder Include="Application\PendingInvoicesBilling\DTOs\" />
 		<Folder Include="Application\PendingInvoicesBilling\Services\" />
-		<Folder Include="Infrastructure\Resource\" />
-		<Folder Include="Infrastructure\Persistence\" />
 	</ItemGroup>
 
 </Project>

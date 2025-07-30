@@ -4,21 +4,19 @@ using System.Text.Json;
 
 namespace PoliedroHangFire.Infrastructure.External.Billing.Adapters.PendingInvoicesBilling;
 
-public class PendingInvoicesService(HttpClient httpClient) : IPendingInvoicesBilling
+public class PendingInvoicesService(HttpClient httpClient, IConfiguration config) : IPendingInvoicesBilling
 {
-    private readonly HttpClient _httpClient = httpClient;
-
     public async Task InvoicePendingAsync(int clienteId, string token, bool resolutionType, string name)
     {
-        _httpClient.DefaultRequestHeaders.Add("X-Environment", "staging-billing");
-        var request = new HttpRequestMessage(HttpMethod.Get, $"https://wc9oqtphb5.execute-api.us-east-2.amazonaws.com/billing/api/v1/invoicespendingwithdetails");
+        httpClient.DefaultRequestHeaders.Add("X-Environment", "production-billing");
+        var request = new HttpRequestMessage(HttpMethod.Get, config["External:PendingInvoicesUrl"]);
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         request.Content = new StringContent(JsonSerializer.Serialize(new
         {
             ResolutionType = resolutionType,
             Name = name
         }), Encoding.UTF8, "application/json");
-        var response = await _httpClient.SendAsync(request);
+        var response = await httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
     }
 }
