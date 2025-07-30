@@ -6,7 +6,6 @@ using PoliedroHangFire.Application.PendingInvoicesBilling.Interfaces;
 using PoliedroHangFire.HangfireJobs.ConfigJbos.Billing;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.ClientBilling;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.PendingInvoicesBilling;
-using PoliedroHangFire.WebApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
