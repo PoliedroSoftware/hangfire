@@ -16,7 +16,7 @@ public class ConfigJobs
 
         foreach (var cliente in clientes)
         {
-            if (!cliente.Active || cliente.Iterations <= 0) continue;
+            if (cliente.Active) continue;
 
             var jobId = $"facturacion-cliente-{cliente.ClientBillingElectronicId}";
             var interval = Cron.MinuteInterval(cliente.Iterations);

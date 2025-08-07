@@ -2,9 +2,11 @@
 using Hangfire.Dashboard;
 using Hangfire.MySql;
 using PoliedroHangFire.Application.ClientBilling.Interfaces;
+using PoliedroHangFire.Application.InvoicesEmitterBilling.Interfaces;
 using PoliedroHangFire.Application.PendingInvoicesBilling.Interfaces;
 using PoliedroHangFire.HangfireJobs.ConfigJbos.Billing;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.ClientBilling;
+using PoliedroHangFire.Infrastructure.External.Billing.Adapters.InvoicesEmitterBilling;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.PendingInvoicesBilling;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +14,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddHttpClient<IClientService, ClientService>();
 builder.Services.AddTransient<IPendingInvoicesBilling, PendingInvoicesService>();
+builder.Services.AddTransient<IInvoicesEmitterBIlling, InvoicesEmitterBilling>();
 
 builder.Services.AddHangfire(config => {
     var connectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION") ?? builder.Configuration.GetConnectionString("HangfireConnection");
