@@ -1,4 +1,6 @@
-﻿using PoliedroHangFire.Application.PendingInvoicesBilling.Interfaces;
+﻿using Hangfire;
+using PoliedroHangFire.Application.InvoicesEmitterBilling.Interfaces;
+using PoliedroHangFire.Application.PendingInvoicesBilling.Interfaces;
 using System.Text;
 using System.Text.Json;
 
@@ -10,14 +12,35 @@ public class PendingInvoicesService(HttpClient httpClient, IConfiguration config
     {
         httpClient.DefaultRequestHeaders.Add("X-Environment", "production-billing");
         var request = new HttpRequestMessage(HttpMethod.Get, config["External:PendingInvoicesUrl"]);
+
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         request.Content = new StringContent(JsonSerializer.Serialize(new
         {
             ResolutionType = resolutionType,
             Name = name
         }), Encoding.UTF8, "application/json");
+
+
         var response = await httpClient.SendAsync(request);
         response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+
+        if (!string.IsNullOrWhiteSpace(json))
+        {
+            Console.WriteLine($"[INFO] {name}: Se encontraron facturas pendientes, programando job de emisión...");
+
+            // Programar el job de emisión como uno nuevo
+            BackgroundJob.Enqueue<IInvoicesEmitterBIlling>(svc =>
+                svc.InvoicesEmitterServicesAsync(json, token)
+            );
+        }
+        else
+        {
+            Console.WriteLine($"[INFO] {name}: No hay facturas pendientes.");
+        }
+
+
     }
 }
 
