@@ -8,7 +8,7 @@ public class InvoicesEmitterBilling(HttpClient httpClient, IConfiguration config
     public async Task InvoicesEmitterServicesAsync(string jsonInvoices, string token)
     {
         httpClient.DefaultRequestHeaders.Clear();
-        //httpClient.DefaultRequestHeaders.Add("X-Environment", "production-billing");
+        httpClient.DefaultRequestHeaders.Add("X-Environment", "production-billing");
         var request = new HttpRequestMessage(HttpMethod.Post, config["External:EmitInvoicesUrl"]);
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
         request.Content = new StringContent(jsonInvoices, Encoding.UTF8, "application/json");
