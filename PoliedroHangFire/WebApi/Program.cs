@@ -8,6 +8,7 @@ using PoliedroHangFire.HangfireJobs.ConfigJbos.Billing;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.ClientBilling;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.InvoicesEmitterBilling;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.PendingInvoicesBilling;
+using PoliedroHangFire.WebApi.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +16,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient<IClientService, ClientService>();
 builder.Services.AddTransient<IPendingInvoicesBilling, PendingInvoicesService>();
 builder.Services.AddTransient<IInvoicesEmitterBIlling, InvoicesEmitterBilling>();
+
+// Agregar Health Check solo para el servicio de clientes
+builder.Services.AddHealthChecks()
+    .AddTypeActivatedCheck<ExternalServiceHealthCheck>(
+        "client-service",
+        args: new object[] { builder.Configuration["External:ClientsUrl"]!, "Client Service" });
+
+// Registrar HttpClient para health checks
+builder.Services.AddHttpClient();
 
 builder.Services.AddHangfire(config => {
     var connectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION") ?? builder.Configuration.GetConnectionString("HangfireConnection");
@@ -35,6 +45,31 @@ builder.Services.AddAntiforgery();
 
 var app = builder.Build();
 
+// Configurar Health Check endpoints
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var response = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(x => new
+            {
+                name = x.Key,
+                status = x.Value.Status.ToString(),
+                description = x.Value.Description,
+                duration = x.Value.Duration.TotalMilliseconds
+            }),
+            totalDuration = report.TotalDuration.TotalMilliseconds
+        };
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response));
+    }
+});
+
+// Health check simple (para Docker)
+app.MapHealthChecks("/health/simple");
+
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
     Authorization = new IDashboardAuthorizationFilter[]
@@ -42,9 +77,20 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
         new PoliedroHangFire.WebApi.DevDashboardAccessFilter()
     }
 });
-using (var scope = app.Services.CreateScope())
+
+// Intentar registrar jobs de forma segura
+try
 {
-    await ConfigJobs.RegisterJobsAsync(scope.ServiceProvider);
+    using (var scope = app.Services.CreateScope())
+    {
+        await ConfigJobs.RegisterJobsAsync(scope.ServiceProvider);
+        Console.WriteLine("[INFO] Jobs registrados exitosamente durante el startup");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[WARNING] No se pudieron registrar los jobs durante el startup: {ex.Message}");
+    Console.WriteLine("[INFO] La aplicación continuará ejecutándose. Verifique la conectividad con el servicio externo.");
 }
 
 app.Run();
