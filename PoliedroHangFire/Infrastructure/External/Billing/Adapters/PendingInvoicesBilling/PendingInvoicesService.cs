@@ -26,7 +26,9 @@ public class PendingInvoicesService(HttpClient httpClient, IConfiguration config
 
         var json = await response.Content.ReadAsStringAsync();
 
-        if (!string.IsNullOrWhiteSpace(json))
+        var invoices = JsonSerializer.Deserialize<List<object>>(json);
+
+        if (invoices != null && invoices.Any())
         {
             Console.WriteLine($"[INFO] {name}: Se encontraron facturas pendientes, programando job de emisión...");
 
