@@ -16,11 +16,8 @@ public class ConfigJobs
 
         foreach (var cliente in clientes)
         {
-            
-
             var jobId = $"facturacion-cliente-{cliente.ClientBillingElectronicId}";
             var interval = Cron.MinuteInterval(cliente.Iterations);
-
             recurringJobs.AddOrUpdate(
                 jobId,
                 () => job.InvoicePendingAsync(
