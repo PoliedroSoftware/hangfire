@@ -1,0 +1,140 @@
+name: Build, Test, Deploy to On-Premise
+
+on:
+  push:
+    branches:
+      - Feature/test-github-actions
+
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+      - 'release/*'
+      - 'releasecandidate/*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  dotnet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup .NET & Restore
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Unit Tests
+        run: dotnet test --configuration Release --no-build
+
+  sonar:
+    needs: dotnet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v2
+        with:
+          args: >
+            -Dsonar.projectKey=PoliedroSoftware_hangfire
+            -Dsonar.organization=poliedro-software-sonarqube
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  deploy-onpremise:
+    if: github.event.pull_request.merged == true
+    needs: [dotnet, sonar]
+    runs-on: ubuntu-latest
+    environment: OnPremise
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Build Docker image
+        run: docker build -t hangfire:latest .
+
+      - name: Save Docker image to tar
+        run: docker save hangfire:latest | gzip > hangfire.tar.gz
+
+      - name: Install cloudflared
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+          chmod +x cloudflared
+          sudo mv cloudflared /usr/local/bin/
+
+      - name: Start Cloudflare Tunnel SSH proxy
+        run: |
+          cloudflared access tcp --hostname ${{ secrets.SSH_HOST_ONPREMISE }} --url localhost:2222 &
+          sleep 5
+          echo "SSH proxy started on localhost:2222"
+
+      - name: Install sshpass
+        run: sudo apt-get install -y sshpass
+
+      - name: Copy image to on-premise server
+        run: |
+          sshpass -p "${{ secrets.SSH_PASSWORD_ONPREMISE }}" \
+            scp -P 2222 -o StrictHostKeyChecking=no \
+            hangfire.tar.gz ${{ secrets.SSH_USER_ONPREMISE }}@localhost:/tmp/
+        timeout-minutes: 10
+
+      - name: Deploy container on on-premise server
+        run: |
+          sshpass -p "${{ secrets.SSH_PASSWORD_ONPREMISE }}" \
+            ssh -p 2222 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER_ONPREMISE }}@localhost \
+            "docker stop hangfire || true; \
+             docker rm hangfire || true; \
+             docker rmi hangfire:latest || true; \
+             gunzip -c /tmp/hangfire.tar.gz | docker load; \
+             docker run -d --name hangfire \
+               --restart unless-stopped \
+               -p 8080:8080 \
+               -p 8081:8081 \
+               -e ASPNETCORE_ENVIRONMENT=Production \
+               -e MYSQL_CONNECTION='${{ secrets.MYSQL_CONNECTION_ONPREMISE }}' \
+               hangfire:latest"
+
+      - name: Check container logs
+        if: always()
+        run: |
+          sleep 10
+          echo "=== Container status ==="
+          sshpass -p "${{ secrets.SSH_PASSWORD_ONPREMISE }}" \
+            ssh -p 2222 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER_ONPREMISE }}@localhost \
+            "docker ps -a --filter name=hangfire --format '{{.Names}} {{.Status}}'"
+          echo "=== Container logs (last 30 lines) ==="
+          sshpass -p "${{ secrets.SSH_PASSWORD_ONPREMISE }}" \
+            ssh -p 2222 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER_ONPREMISE }}@localhost \
+            "docker logs hangfire --tail 30 2>&1"
+
+      - name: Health check (via SSH tunnel)
+        run: |
+          for i in $(seq 1 30); do
+            RESULT=$(sshpass -p "${{ secrets.SSH_PASSWORD_ONPREMISE }}" \
+              ssh -p 2222 -o StrictHostKeyChecking=no ${{ secrets.SSH_USER_ONPREMISE }}@localhost \
+              "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health 2>&1")
+            echo "HTTP status: $RESULT (attempt $i/30)"
+            if [ "$RESULT" = "200" ]; then
+              echo "Container is healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Health check failed after 30 retries"
+          exit 1
+
+      - name: Kill Cloudflare Tunnel SSH proxy
+        if: always()
+        run: pkill cloudflared || true
