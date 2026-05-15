@@ -53,7 +53,7 @@ jobs:
   #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   deploy-onpremise:
-    if: github.event.pull_request.merged == true
+    if: github.event_name == 'push' || github.event.pull_request.merged == true
     needs: dotnet
     runs-on: ubuntu-latest
     environment: OnPremise
