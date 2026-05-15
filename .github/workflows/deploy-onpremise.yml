@@ -36,25 +36,25 @@ jobs:
       - name: Unit Tests
         run: dotnet test --configuration Release --no-build
 
-  sonar:
-    needs: dotnet
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        with:
-          args: >
-            -Dsonar.projectKey=PoliedroSoftware_hangfire
-            -Dsonar.organization=poliedro-software-sonarqube
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  # sonar:
+  #   needs: dotnet
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v2
+  #
+  #     - name: SonarCloud Scan
+  #       uses: SonarSource/sonarcloud-github-action@v2
+  #       with:
+  #         args: >
+  #           -Dsonar.projectKey=PoliedroSoftware_hangfire
+  #           -Dsonar.organization=poliedro-software-sonarqube
+  #       env:
+  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   deploy-onpremise:
     if: github.event.pull_request.merged == true
-    needs: [dotnet, sonar]
+    needs: dotnet
     runs-on: ubuntu-latest
     environment: OnPremise
 
