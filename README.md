@@ -1,20 +1,94 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# Poliedro Hangfire - Automatización de Facturación
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+Servicio de automatización de facturación electrónica para Poliedro usando Hangfire. El servicio obtiene clientes desde una API externa, registra jobs recurrentes por cliente, consulta facturas pendientes y las envía para emisión.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## Stack
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+- .NET 10 (ASP.NET Core)
+- Hangfire con MySQL (MySqlStorage)
+- Docker / AWS ECS
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## Requisitos
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- MySQL (según `appsettings.json` o variable `MYSQL_CONNECTION`)
+
+## Ejecutar localmente
+
+```bash
+dotnet restore
+dotnet build
+dotnet run --project PoliedroHangFire
+```
+
+La app escucha en `http://localhost:5254` y `https://localhost:7008`.
+
+## Variables de entorno
+
+| Variable | Descripción |
+|---|---|
+| `MYSQL_CONNECTION` | Connection string de MySQL (si no se define, usa `appsettings.json`) |
+
+## Endpoints
+
+| Ruta | Descripción |
+|---|---|
+| `/hangfire` | Dashboard de Hangfire (sin auth) |
+| `/health` | Health check detallado (JSON) |
+| `/health/simple` | Health check simple (usado por Docker) |
+
+## Jobs
+
+Al iniciar, la app obtiene los clientes desde `External:ClientsUrl` y registra un job recurrente por cliente (`facturacion-cliente-{id}`). Cada job consulta facturas pendientes; si encuentra, encola un job de emisión.
+
+## Docker
+
+### Build local
+
+```bash
+docker build -t poliedro-hangfire .
+```
+
+### Run local
+
+```bash
+docker run -d -p 8080:8080 \
+  -e MYSQL_CONNECTION="Server=tu-host;Port=3306;Database=tu-db;Uid=tu-user;Pwd=tu-pass;Allow User Variables=True" \
+  --name poliedro-hangfire poliedro-hangfire
+```
+
+### Ver logs
+
+```bash
+docker logs -f poliedro-hangfire
+```
+
+### Verificar health
+
+```bash
+curl http://localhost:8080/health/simple
+```
+
+### Detener y eliminar
+
+```bash
+docker stop poliedro-hangfire
+docker rm poliedro-hangfire
+```
+
+## CI/CD
+
+GitHub Actions (`.github/workflows/aws.yml`) ejecuta build, test, SonarCloud, y en merge a `main`/`release/*`/`releasecandidate/*` publica imagen Docker en ECR y Docker Hub, y despliega en AWS ECS.
+
+## Estructura del proyecto
+
+```
+PoliedroHangFire/
+├── WebApi/                  Program.cs, health checks, filtros
+├── Domain/                  Entidades (ClientBilling)
+├── Application/             Interfaces (Client, PendingInvoices, Emitter)
+├── Infrastructure/          Adaptadores HTTP a APIs externas
+└── HangfireJobs/            Registro de jobs recurrentes
+```
+
+**Nota:** Los directorios `Infrastructure/Persistence/` e `Infrastructure/Resource/` están excluidos de compilación en el `.csproj`.
