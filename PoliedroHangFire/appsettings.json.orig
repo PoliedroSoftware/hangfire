@@ -10,8 +10,14 @@
     "HangfireConnection": "Server=150.136.181.118;Port=3306;Database=billing;Uid=poliedro;Pwd=1091658551Edwar20*;Allow User Variables=True;"
   },
   "External": {
+<<<<<<< HEAD
+    "ClientsUrl": "http://192.168.1.9:5001/api/v1/client",
+    "PendingInvoicesUrl": "http://192.168.1.9:5001/api/v1/invoicespendingwithdetails",
+    "EmitInvoicesUrl": "http://192.168.1.9:5001/api/v1/billing"
+=======
     "ClientsUrl": "https://billing-api.poliedroauth.com/api/v1/client",
     "PendingInvoicesUrl": "https://billing-api.poliedroauth.com/api/v1/invoicespendingwithdetails",
     "EmitInvoicesUrl": "https://billing-api.poliedroauth.com/api/v1/billing"
+>>>>>>> releasecandidate/v1.0.0
   }
 }

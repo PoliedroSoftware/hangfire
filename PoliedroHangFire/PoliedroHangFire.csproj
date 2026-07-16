@@ -37,6 +37,8 @@
 		<PackageReference Include="MySql.Data" Version="9.5.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 		<PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
+		<!-- Prometheus metrics (prometheus-net) -->
+		<PackageReference Include="prometheus-net.AspNetCore" Version="6.1.0" />
 	</ItemGroup>
 
 	<ItemGroup>

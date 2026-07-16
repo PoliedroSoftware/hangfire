@@ -9,6 +9,7 @@ using PoliedroHangFire.Infrastructure.External.Billing.Adapters.ClientBilling;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.InvoicesEmitterBilling;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.PendingInvoicesBilling;
 using PoliedroHangFire.WebApi.HealthChecks;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient<IClientService, ClientService>();
 builder.Services.AddTransient<IPendingInvoicesBilling, PendingInvoicesService>();
 builder.Services.AddTransient<IInvoicesEmitterBIlling, InvoicesEmitterBilling>();
+
+// Observability: prometheus-net metrics registration (centralized HangfireMetrics)
+builder.Services.AddSingleton<PoliedroHangFire.Infrastructure.Observability.HangfireMetrics>();
 
 // Agregar Health Check solo para el servicio de clientes
 builder.Services.AddHealthChecks()
@@ -77,6 +81,11 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
         new PoliedroHangFire.WebApi.DevDashboardAccessFilter()
     }
 });
+
+// Prometheus-net HTTP metrics middleware and /metrics endpoint
+// Expose standard HTTP metrics (requests, latency, status, endpoint) and the /metrics endpoint for Prometheus to scrape.
+app.UseHttpMetrics();
+app.MapMetrics("/metrics");
 
 // Intentar registrar jobs de forma segura
 try
