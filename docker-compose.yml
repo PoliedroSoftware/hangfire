@@ -1,0 +1,43 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: hangfire-mysql
+    environment:
+      MYSQL_DATABASE: hangfire
+      MYSQL_USER: hangfire
+      MYSQL_PASSWORD: hangfire_secret
+      MYSQL_ROOT_PASSWORD: root_secret
+    volumes:
+      - hangfire-mysql-data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+    command:
+      - --innodb_buffer_pool_size=256M
+      - --max_connections=300
+      - --wait_timeout=28800
+      - --interactive_timeout=28800
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_secret"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  hangfire:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hangfire-app
+    ports:
+      - "8080:8080"
+    environment:
+      MYSQL_CONNECTION: "Server=mysql;Port=3306;Database=hangfire;Uid=hangfire;Pwd=hangfire_secret;Allow User Variables=True;Pooling=True;Max Pool Size=200;Connection Lifetime=300;Connection Idle Timeout=60;Connection Timeout=5;Default Command Timeout=60;"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  hangfire-mysql-data:
