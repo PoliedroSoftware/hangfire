@@ -1,88 +1,97 @@
 # AGENTS.md
 
-## Project identity
+## Project
 
-- .NET 10 ASP.NET Core Web App for Poliedro billing automation via Hangfire.
-- Single project at `PoliedroHangFire/`, solution file at `PoliedroHangFire.sln`.
+.NET 10 ASP.NET Core Hangfire service for electronic invoice automation (Poliedro). Single-project solution (no test project).
 
-## Build, test, run
+## Commands
 
 ```bash
-dotnet restore
-dotnet build
-dotnet test
+dotnet restore              # restore packages
+dotnet build                # compile
+dotnet run --project PoliedroHangFire   # run locally (ports 5254 / 7008)
 ```
 
-No test projects exist yet — CI runs `dotnet test` expecting `[Fact]`/`[Test]` attributes somewhere.
+No tests, linter, formatter, or typecheck commands exist.
 
-Run locally: `dotnet run --project PoliedroHangFire` (listens on `http://localhost:5254` and `https://localhost:7008`).
+## Architecture (single `.csproj`)
 
-## Excluded from compilation
+| Layer | Path | Role |
+|---|---|---|
+| Domain | `Domain/ClientBilling/Entities/` | Entity models (`ClientBilling`) |
+| Application | `Application/*/Interfaces/` | Service interfaces |
+| Infrastructure | `Infrastructure/External/` | HTTP adapters to external billing APIs |
+| Infrastructure | `Infrastructure/Observability/` | Prometheus metrics (`HangfireMetrics`) |
+| WebApi | `WebApi/` | `Program.cs`, health checks, Hangfire dashboard filter |
+| HangfireJobs | `HangfireJobs/ConfigJbos/` | Recurring job registration |
 
-The `.csproj` explicitly removes these folders from compile, content, and resource inclusion:
-- `Infrastructure\Persistence\**`
-- `Infrastructure\Resource\**`
+**Important**: `Infrastructure/Persistence/` and `Infrastructure/Resource/` are **excluded from compilation** (csproj `Remove` directives).
 
-Do NOT place code in those directories.
+## Hangfire
 
-## Hangfire configuration
+- **Storage**: MySQL via `MySqlStorage` with `TablesPrefix = "Hangfire"`
+- **Worker count**: 5
+- **Connection string**: `MYSQL_CONNECTION` env var > `ConnectionStrings:HangfireConnection` in appsettings.json
+- **Dashboard**: `/hangfire` — **no auth** (`DevDashboardAccessFilter` always returns `true`)
+- **Job registration**: At startup, `ConfigJobs.RegisterJobsAsync` fetches clients from `External:ClientsUrl` and registers one recurring job per client: `facturacion-cliente-{id}` at `Cron.MinuteInterval(iterations)`.
 
-- **Storage**: `MySqlStorage` with table prefix `Hangfire`.
-- **Connection string override**: Set `MYSQL_CONNECTION` env var to override `ConnectionStrings:HangfireConnection`. The start-up reads the env var first, falls back to `appsettings.json`.
-- **Server**: `AddHangfireServer(options => options.WorkerCount = 5)`.
-- **Dashboard**: mounted at `/hangfire`. No auth (the `DevDashboardAccessFilter` always returns `true`).
-- `Hangfire.MemoryStorage` is in the dependencies but NOT used at runtime — it's only referenced in the package list.
+**Connection string must include** `Pooling=True;Max Pool Size=200;Connection Lifetime=300;Connection Idle Timeout=60;` to avoid pool exhaustion. If using `MYSQL_CONNECTION` env var, add these parameters there too. For local Docker setup, also add `Connection Timeout=5;Default Command Timeout=60;`.
 
-## Job registration flow (critical)
+**Job flow**: Recurring job (`PendingInvoicesService.InvoicePendingAsync`) → checks pending invoices → enqueues `BackgroundJob.Enqueue<IInvoicesEmitterBIlling>` to emit.
 
-1. On startup, `ConfigJobs.RegisterJobsAsync` is called.
-2. It calls `IClientService.GetClientBillingsAsync()` to fetch clients from the external billing API.
-3. For each client, a **recurring Hangfire job** is registered with id `facturacion-cliente-{ClientBillingElectronicId}` running at `Cron.MinuteInterval(cliente.Iterations)` minutes.
-4. Each recurring job calls `IPendingInvoicesBilling.InvoicePendingAsync(...)`.
-5. If pending invoices are found, it enqueues a fire-and-forget job via `BackgroundJob.Enqueue<IInvoicesEmitterBIlling>(...)`.
+## External APIs (config key `External:*`)
 
-**Important**: Jobs are not static — they are created dynamically from API data. If `GetClientBillingsAsync` fails, jobs are NOT registered but the app continues running (catch in Program.cs).
+| Config | Purpose |
+|---|---|
+| `ClientsUrl` | GET list of clients |
+| `PendingInvoicesUrl` | GET pending invoices (Bearer token auth) |
+| `EmitInvoicesUrl` | POST to emit invoices |
 
-## Health checks
+All HTTP calls include header `X-Environment: production-billing`.
 
-- `/health` — detailed JSON with per-check status, handled by custom response writer (Program.cs:49).
-- `/health/simple` — raw minimal response, used by Docker HEALTHCHECK.
-- Both require `AddHealthChecks()` and `MapHealthChecks()`, which are wired in Program.cs.
+## Endpoints
 
-## Docker
+| Route | Description |
+|---|---|
+| `/hangfire` | Hangfire dashboard (no auth) |
+| `/health` | Detailed JSON health check |
+| `/health/simple` | Simple health check (used by Docker `HEALTHCHECK`) |
+| `/metrics` | Prometheus metrics (prometheus-net) |
 
-- **Build context**: repository root (not `PoliedroHangFire/`).
-- **Target framework**: `net10.0`, base image `mcr.microsoft.com/dotnet/aspnet:10.0`.
-- **Exposed ports**: 8080, 8081.
-- **Healthcheck**: `curl -f http://localhost:8080/health/simple`.
+## Prometheus metrics
+
+Defined in `HangfireMetrics` (singleton, wired in DI). Exposes counters (`billing_jobs_executed_total`, `billing_emit_errors_total`, etc.), gauges, and histograms for job duration. HTTP metrics middleware (`UseHttpMetrics`) is enabled.
 
 ## CI/CD (GitHub Actions)
 
-- **Workflow**: `.github/workflows/aws.yml`.
-- **Triggers**: push to `Feature/test-github-actions`; PRs (opened, sync, reopen, close) to `main`, `release/*`, `releasecandidate/*`.
-- **Jobs**: `dotnet` (restore, build, test) → `sonar` (SonarCloud) → on merge: `docker` (push to AWS ECR), `docker-hub` (push to Docker Hub), `deploy` (AWS ECS force-new-deployment).
-- Docker and deploy only run when `github.event.pull_request.merged == true`.
+`.github/workflows/aws.yml` — triggers on PR merge to `main`, `release/*`, `releasecandidate/*`:
 
-## External API dependencies
+1. `dotnet restore` + `dotnet build --configuration Release`
+2. `dotnet test --configuration Release --no-build`
+3. SonarCloud scan
+4. Docker build → push to ECR + Docker Hub
+5. Deploy to AWS ECS (`update-service --force-new-deployment`)
 
-All external URLs are configured in `appsettings.json` under `External`:
-- `ClientsUrl` — fetch client list
-- `PendingInvoicesUrl` — get pending invoices per client
-- `EmitInvoicesUrl` — post invoices for emission
+## Docker
 
-All HTTP clients send header `X-Environment: production-billing`.
+Multi-stage build (container port `8080`). `HEALTHCHECK` runs `curl -f http://localhost:8080/health/simple`.
 
-## Project structure conventions
+### Docker Compose (local development)
 
-- `Domain/` — entities (e.g., `ClientBilling`)
-- `Application/{Feature}/Interfaces/` — service interfaces
-- `Application/{Feature}/DTOs/` — empty, reserved
-- `Application/{Feature}/Services/` — empty, reserved
-- `Infrastructure/External/Billing/Adapters/{Feature}/` — service implementations
-- `HangfireJobs/ConfigJbos/Billing/` — job scheduling
-- `WebApi/` — Program.cs, filters, health checks
+`docker-compose.yml` at repo root runs MySQL 8.0 (`hangfire-mysql`) + Hangfire (`hangfire-app`). The `MYSQL_CONNECTION` env var points to the local MySQL container. Tables are auto-created by `PrepareSchemaIfNecessary=true`.
 
-## Security notes
+```bash
+docker compose up -d --build
+# App at http://localhost:8080
+# MySQL at localhost:3307 (exposed for admin tools)
+```
 
-- `appsettings.json` contains a hardcoded MySQL password. Do not log this file or expose it.
-- The Hangfire dashboard has no auth (open to anyone who reaches the endpoint).
+**Warning**: First-time startup requires MySQL to initialize (~30s). Hangfire waits via `depends_on: condition: service_healthy`. Check logs with `docker compose logs -f`.
+
+### Known issue: remote MySQL connectivity
+
+When using the remote MySQL (`150.136.181.118`), the Hangfire server may experience **command timeout + SocketException 10060** in components like `ExpirationManager`. This is a network-level connectivity issue (not wait_timeout or connection pool). If it persists, deploy with the dedicated MySQL container approach (`docker-compose.yml`).
+
+## Namespace convention
+
+`PoliedroHangFire.{Layer}.{Subdomain}.{...}` — no separate assemblies per layer.

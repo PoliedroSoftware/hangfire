@@ -11,18 +11,15 @@ public class PendingInvoicesService(HttpClient httpClient, IConfiguration config
 {
     public async Task InvoicePendingAsync(int clienteId, string token, bool resolutionType, string name)
     {
-        // Mark job start and measure overall job duration
         metrics.BillingJobsExecutedTotal.Inc();
         var jobSw = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
-            // Each invocation corresponds to a client being processed by the orchestrator
             metrics.BillingClientsProcessedTotal.Inc();
 
-            httpClient.DefaultRequestHeaders.Add("X-Environment", "production-billing");
             var request = new HttpRequestMessage(HttpMethod.Get, config["External:PendingInvoicesUrl"]);
-
+            request.Headers.Add("X-Environment", "production-billing");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
             request.Content = new StringContent(JsonSerializer.Serialize(new
             {
@@ -30,9 +27,9 @@ public class PendingInvoicesService(HttpClient httpClient, IConfiguration config
                 Name = name
             }), Encoding.UTF8, "application/json");
 
-            // Measure time spent consulting pending invoices for this client
             var clientSw = System.Diagnostics.Stopwatch.StartNew();
-            var response = await httpClient.SendAsync(request);
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var response = await httpClient.SendAsync(request, cts.Token);
             response.EnsureSuccessStatusCode();
 
             var json = await response.Content.ReadAsStringAsync();

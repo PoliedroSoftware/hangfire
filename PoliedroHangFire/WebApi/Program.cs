@@ -15,17 +15,18 @@ var builder = WebApplication.CreateBuilder(args);
 
 
 builder.Services.AddHttpClient<IClientService, ClientService>();
-builder.Services.AddTransient<IPendingInvoicesBilling, PendingInvoicesService>();
-builder.Services.AddTransient<IInvoicesEmitterBIlling, InvoicesEmitterBilling>();
+builder.Services.AddHttpClient<IPendingInvoicesBilling, PendingInvoicesService>();
+builder.Services.AddHttpClient<IInvoicesEmitterBIlling, InvoicesEmitterBilling>();
 
 // Observability: prometheus-net metrics registration (centralized HangfireMetrics)
 builder.Services.AddSingleton<PoliedroHangFire.Infrastructure.Observability.HangfireMetrics>();
 
-// Agregar Health Check solo para el servicio de clientes
+// Health checks: servicio externo + Hangfire
 builder.Services.AddHealthChecks()
     .AddTypeActivatedCheck<ExternalServiceHealthCheck>(
         "client-service",
-        args: new object[] { builder.Configuration["External:ClientsUrl"]!, "Client Service" });
+        args: new object[] { builder.Configuration["External:ClientsUrl"]!, "Client Service" })
+    .AddCheck<HangfireHealthCheck>("hangfire");
 
 // Registrar HttpClient para health checks
 builder.Services.AddHttpClient();
