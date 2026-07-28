@@ -28,7 +28,7 @@ public class PendingInvoicesService(HttpClient httpClient, IConfiguration config
             }), Encoding.UTF8, "application/json");
 
             var clientSw = System.Diagnostics.Stopwatch.StartNew();
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             var response = await httpClient.SendAsync(request, cts.Token);
             response.EnsureSuccessStatusCode();
 

@@ -17,7 +17,7 @@ public class InvoicesEmitterBilling(HttpClient httpClient, IConfiguration config
 
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             var response = await httpClient.SendAsync(request, cts.Token);
 
             var responseContent = await response.Content.ReadAsStringAsync();
