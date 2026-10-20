@@ -10,8 +10,11 @@ using PoliedroHangFire.Infrastructure.External.Billing.Adapters.InvoicesEmitterB
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.PendingInvoicesBilling;
 using PoliedroHangFire.WebApi.HealthChecks;
 using Prometheus;
+using PoliedroHangFire.Infrastructure.External.Billing;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddHttpClient<BillingAutomation>(client => client.Timeout = TimeSpan.FromMinutes(5))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
 
 builder.Services.AddHttpClient<IClientService, ClientService>();
@@ -33,7 +36,6 @@ builder.Services.AddHttpClient();
 
 builder.Services.AddHangfire(config => {
     var connectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION") ?? builder.Configuration.GetConnectionString("HangfireConnection");
-    Console.WriteLine($"[INFO] ConnectionString usada: {connectionString}");
     config.UseSimpleAssemblyNameTypeSerializer()
           .UseRecommendedSerializerSettings()
           .UseStorage(new MySqlStorage(connectionString, new MySqlStorageOptions
@@ -44,7 +46,7 @@ builder.Services.AddHangfire(config => {
 
           }));
 });
-builder.Services.AddHangfireServer(options => options.WorkerCount = 5);
+builder.Services.AddHangfireServer(options => options.WorkerCount = builder.Configuration.GetValue("Hangfire:WorkerCount", 5));
 
 builder.Services.AddAntiforgery();
 
@@ -77,6 +79,7 @@ app.MapHealthChecks("/health/simple");
 
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
+    IsReadOnlyFunc = _ => builder.Configuration.GetValue("Hangfire:DashboardReadOnly", true),
     Authorization = new IDashboardAuthorizationFilter[]
     {
         new PoliedroHangFire.WebApi.DevDashboardAccessFilter()
@@ -93,7 +96,16 @@ try
 {
     using (var scope = app.Services.CreateScope())
     {
-        await ConfigJobs.RegisterJobsAsync(scope.ServiceProvider);
+        if (builder.Configuration.GetValue("Billing:Enabled", false))
+        {
+            var recurring = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
+            recurring.AddOrUpdate<BillingAutomation>("billing-v1-reconcile", job => job.ReconcileAsync(), "*/5 * * * *");
+            await scope.ServiceProvider.GetRequiredService<BillingAutomation>().ReconcileAsync();
+        }
+        else
+        {
+            await ConfigJobs.RegisterJobsAsync(scope.ServiceProvider);
+        }
         Console.WriteLine("[INFO] Jobs registrados exitosamente durante el startup");
     }
 }
