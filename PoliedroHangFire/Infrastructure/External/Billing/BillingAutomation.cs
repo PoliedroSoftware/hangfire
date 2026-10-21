@@ -5,7 +5,7 @@ using Hangfire.Storage;
 
 namespace PoliedroHangFire.Infrastructure.External.Billing;
 
-/// <summary>Billing v1 adapter. Jobs persist resolution IDs, never customer data or Plemsi keys.</summary>
+/// <summary>Billing v1 adapter. Jobs persist resolution IDs and client display names, never invoice data or Plemsi keys.</summary>
 public sealed class BillingAutomation(HttpClient http, IConfiguration configuration,
     IRecurringJobManager jobs, ILogger<BillingAutomation> logger)
 {
@@ -18,6 +18,7 @@ public sealed class BillingAutomation(HttpClient http, IConfiguration configurat
         return request;
     }
 
+    [JobDisplayName("Actualizar programación de clientes")]
     [AutomaticRetry(Attempts = 0)]
     [DisableConcurrentExecution(120)]
     public async Task ReconcileAsync()
@@ -34,12 +35,20 @@ public sealed class BillingAutomation(HttpClient http, IConfiguration configurat
         foreach (var candidate in candidates)
         {
             var id = candidate.ResolutionId;
+            var clientName = string.IsNullOrWhiteSpace(candidate.Name) ? "Cliente sin nombre" : candidate.Name.Trim();
             jobs.AddOrUpdate<BillingAutomation>("billing-v1-resolution-" + id,
-                job => job.ProcessResolutionAsync(id), $"*/{interval} * * * *");
+                job => job.ProcessResolutionAsync(id, clientName), $"*/{interval} * * * *");
         }
         logger.LogInformation("Billing schedule reconciled: {Count} active resolutions. Each execution rechecks client and license.", candidates.Count);
     }
 
+    [JobDisplayName("{1} · Resolución {0}")]
+    [AutomaticRetry(Attempts = 0)]
+    [DisableConcurrentExecution(600)]
+    public Task ProcessResolutionAsync(int resolutionId, string clientName) => ProcessResolutionAsync(resolutionId);
+
+    // Keep the original signature callable for jobs already persisted before display names were added.
+    [JobDisplayName("Resolución {0}")]
     [AutomaticRetry(Attempts = 0)]
     [DisableConcurrentExecution(600)]
     public async Task ProcessResolutionAsync(int resolutionId)
@@ -75,7 +84,7 @@ public sealed class BillingAutomation(HttpClient http, IConfiguration configurat
         logger.LogInformation("Resolution {Id}: {Count} invoices processed.", resolutionId, results.Count);
     }
 
-    public record Candidate(int ResolutionId);
+    public record Candidate(int ResolutionId, string? Name = null);
     public record Eligibility(bool Allowed);
     public record Pending(bool Success, JsonElement Data);
     public record EmissionResult(bool Status);
