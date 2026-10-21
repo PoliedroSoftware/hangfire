@@ -6,9 +6,11 @@ namespace PoliedroHangFire.WebApi.HealthChecks;
 public class HangfireHealthCheck : IHealthCheck
 {
     private readonly string _connectionString;
+    private readonly string _serverTable;
 
     public HangfireHealthCheck(IConfiguration configuration)
     {
+        _serverTable = HangfireStorageConfiguration.TablesPrefix(configuration) + "Server";
         _connectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION")
             ?? configuration.GetConnectionString("HangfireConnection")
             ?? throw new InvalidOperationException("MySQL connection string not found");
@@ -22,7 +24,7 @@ public class HangfireHealthCheck : IHealthCheck
             await connection.OpenAsync(cancellationToken);
 
             using var command = new MySqlCommand(
-                "SELECT COUNT(*) FROM HangfireServer WHERE LastHeartbeat >= DATE_SUB(NOW(), INTERVAL 2 MINUTE)",
+                $"SELECT COUNT(*) FROM `{_serverTable}` WHERE LastHeartbeat >= DATE_SUB(NOW(), INTERVAL 2 MINUTE)",
                 connection);
             var activeServers = (long)(await command.ExecuteScalarAsync(cancellationToken))!;
 

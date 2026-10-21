@@ -36,9 +36,7 @@ builder.Services.AddHttpClient();
 
 builder.Services.AddHangfire(config => {
     var connectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION") ?? builder.Configuration.GetConnectionString("HangfireConnection");
-    var tablesPrefix = builder.Configuration["Hangfire:TablesPrefix"] ?? "Hangfire";
-    if (!System.Text.RegularExpressions.Regex.IsMatch(tablesPrefix, @"\A[A-Za-z][A-Za-z0-9_]{0,39}\z"))
-        throw new InvalidOperationException("Hangfire:TablesPrefix must contain only letters, digits and underscores.");
+    var tablesPrefix = PoliedroHangFire.WebApi.HangfireStorageConfiguration.TablesPrefix(builder.Configuration);
     config.UseSimpleAssemblyNameTypeSerializer()
           .UseRecommendedSerializerSettings()
           .UseStorage(new MySqlStorage(connectionString, new MySqlStorageOptions
