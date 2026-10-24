@@ -39,7 +39,7 @@ La app escucha en `http://localhost:5254` y `https://localhost:7008`.
 
 ## Jobs
 
-Al iniciar, la app obtiene los clientes desde `External:ClientsUrl` y registra un job recurrente por cliente (`facturacion-cliente-{id}`). Cada job consulta facturas pendientes; si encuentra, encola un job de emisión.
+Al iniciar, la app obtiene las resoluciones DIAN activas desde `External:DianresolutionUrl` y registra un job recurrente por resolución (`facturacion-resolucion-{resolutionId}`) cada `Hangfire:ResolutionIntervalMinutes` minutos (default 5). Cada job consulta las facturas pendientes de su resolución y, si encuentra, encola un job de emisión que las envía a billing con ese mismo `resolutionId`.
 
 ## Docker
 

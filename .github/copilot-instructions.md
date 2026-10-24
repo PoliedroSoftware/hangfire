@@ -26,22 +26,23 @@ High-level architecture (big picture)
   - Configures Hangfire and starts the Hangfire server (WorkerCount = 5).
   - Attempts to register recurring jobs at startup using ConfigJobs.RegisterJobsAsync.
 - Jobs flow:
-  1. ConfigJobs obtains client list from IClientService.
-  2. For each client it creates a recurring job named facturacion-cliente-{ClientBillingElectronicId} with Cron.MinuteInterval(cliente.Iterations) that calls IPendingInvoicesBilling.InvoicePendingAsync(...).
-  3. IPendingInvoicesBilling implementation queries external pending-invoices endpoint; if invoices exist it enqueues a BackgroundJob to IInvoicesEmitterBIlling.InvoicesEmitterServicesAsync to emit invoices.
+  1. ConfigJobs obtains the active DIAN resolutions from IDianResolutionService (`GET External:DianresolutionUrl`).
+  2. For each resolution it creates a recurring job named facturacion-resolucion-{ResolutionId} every Hangfire:ResolutionIntervalMinutes (default 5) that calls IPendingInvoicesBilling.InvoicePendingAsync(resolutionId, displayName).
+  3. IPendingInvoicesBilling queries GET {PendingInvoicesUrl}/{resolutionId}; if there are pending invoices it enqueues a BackgroundJob to IInvoicesEmitterBIlling.InvoicesEmitterServicesAsync, which posts {"data":[...]} to POST {EmitInvoicesUrl}/{resolutionId}.
+  4. The same resolutionId drives the whole flow: discovery, pending query and emission.
 
 Key files to inspect for behavior and changes
 - Program.cs (startup, DI, Hangfire config)
 - HangfireJobs/ConfigJbos/Billing/ConfigJobs.cs (dynamic recurring job registration)
-- Infrastructure/External/Billing/Adapters/* (ClientService, PendingInvoicesService, InvoicesEmitterBilling) — external integrations
+- Infrastructure/External/Billing/Adapters/* (DianResolutionService, PendingInvoicesService, InvoicesEmitterBilling) — external integrations
 - WebApi/HealthChecks/ExternalServiceHealthCheck.cs
 - Dockerfile and .github/workflows/aws.yml (CI pipeline & containerization)
 
 Key conventions and repository-specific notes (preserve these)
-- Dependency injection: adapters are registered as typed HttpClient services (e.g., builder.Services.AddHttpClient<IClientService, ClientService>()). Keep method signatures and DI registrations intact when refactoring.
-- Config keys used by code: External:ClientsUrl, External:PendingInvoicesUrl, External:EmitInvoicesUrl. MYSQL_CONNECTION env var overrides the Hangfire connection string.
-- Job naming: recurring jobs use "facturacion-cliente-{ClientBillingElectronicId}". Do not change this format without updating any callers/monitoring tooling.
-- Cron/interval semantics: Iterations property on ClientBilling is interpreted as minutes and passed to Cron.MinuteInterval(...).
+- Dependency injection: adapters are registered as typed HttpClient services (e.g., builder.Services.AddHttpClient<IDianResolutionService, DianResolutionService>()). Keep method signatures and DI registrations intact when refactoring.
+- Config keys used by code: External:DianresolutionUrl, External:PendingInvoicesUrl, External:EmitInvoicesUrl, Hangfire:ResolutionIntervalMinutes. MYSQL_CONNECTION env var overrides the Hangfire connection string.
+- Job naming: recurring jobs use "facturacion-resolucion-{ResolutionId}". Do not change this format without updating any callers/monitoring tooling. Startup also removes legacy "facturacion-cliente-*" jobs.
+- Cron/interval semantics: Hangfire:ResolutionIntervalMinutes is interpreted as minutes and passed to Cron.MinuteInterval(...).
 - Error handling: startup job registration is tolerant — failures are logged and the app continues. Respect existing try/catch behavior.
 - Logging: code uses Console.WriteLine for operational messages; keep messages clear and concise if adding logs.
 - Schema migration: MySqlStorageOptions.PrepareSchemaIfNecessary = true is relied on in startup — avoid removing it unless schema management is otherwise handled.
@@ -53,10 +54,10 @@ CI notes
   - Docker image build and push steps included (AWS ECR and Docker Hub) and ECS deploy steps when PRs are merged
 
 Files for Copilot to prefer when making suggestions
-- Program.cs, ConfigJobs.cs, adapter classes under Infrastructure/External/Billing, the domain entity ClientBilling, and Dockerfile/.github/workflows/aws.yml.
+- Program.cs, ConfigJobs.cs, adapter classes under Infrastructure/External/Billing, the domain entity DianResolution, and Dockerfile/.github/workflows/aws.yml.
 
 When opening PRs or suggesting changes
-- Preserve public interfaces (IPendingInvoicesBilling, IInvoicesEmitterBIlling, IClientService) unless proposing coordinated API changes across DI registration and all usages.
+- Preserve public interfaces (IPendingInvoicesBilling, IInvoicesEmitterBIlling, IDianResolutionService) unless proposing coordinated API changes across DI registration and all usages.
 - Keep job registration id format and Cron semantics stable or clearly document migration steps.
 - If changing configuration keys, update Dockerfile, README, and CI secrets references.
 

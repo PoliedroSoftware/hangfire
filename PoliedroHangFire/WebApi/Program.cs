@@ -1,23 +1,19 @@
 ﻿using Hangfire;
 using Hangfire.Dashboard;
 using Hangfire.MySql;
-using PoliedroHangFire.Application.ClientBilling.Interfaces;
+using PoliedroHangFire.Application.DianResolution.Interfaces;
 using PoliedroHangFire.Application.InvoicesEmitterBilling.Interfaces;
 using PoliedroHangFire.Application.PendingInvoicesBilling.Interfaces;
 using PoliedroHangFire.HangfireJobs.ConfigJbos.Billing;
-using PoliedroHangFire.Infrastructure.External.Billing.Adapters.ClientBilling;
+using PoliedroHangFire.Infrastructure.External.Billing.Adapters.DianResolutionBilling;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.InvoicesEmitterBilling;
 using PoliedroHangFire.Infrastructure.External.Billing.Adapters.PendingInvoicesBilling;
 using PoliedroHangFire.WebApi.HealthChecks;
 using Prometheus;
-using PoliedroHangFire.Infrastructure.External.Billing;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddHttpClient<BillingAutomation>(client => client.Timeout = TimeSpan.FromMinutes(5))
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
-
-builder.Services.AddHttpClient<IClientService, ClientService>();
+builder.Services.AddHttpClient<IDianResolutionService, DianResolutionService>();
 builder.Services.AddHttpClient<IPendingInvoicesBilling, PendingInvoicesService>();
 builder.Services.AddHttpClient<IInvoicesEmitterBIlling, InvoicesEmitterBilling>();
 
@@ -27,8 +23,8 @@ builder.Services.AddSingleton<PoliedroHangFire.Infrastructure.Observability.Hang
 // Health checks: servicio externo + Hangfire
 builder.Services.AddHealthChecks()
     .AddTypeActivatedCheck<ExternalServiceHealthCheck>(
-        "client-service",
-        args: new object[] { builder.Configuration["External:ClientsUrl"]!, "Client Service" })
+        "dian-resolution",
+        args: new object[] { builder.Configuration["External:DianresolutionUrl"]!, "Dian Resolution Service" })
     .AddCheck<HangfireHealthCheck>("hangfire");
 
 // Registrar HttpClient para health checks
@@ -97,16 +93,7 @@ try
 {
     using (var scope = app.Services.CreateScope())
     {
-        if (builder.Configuration.GetValue("Billing:Enabled", false))
-        {
-            var recurring = scope.ServiceProvider.GetRequiredService<IRecurringJobManager>();
-            recurring.AddOrUpdate<BillingAutomation>("billing-v1-reconcile", job => job.ReconcileAsync(), "*/5 * * * *");
-            await scope.ServiceProvider.GetRequiredService<BillingAutomation>().ReconcileAsync();
-        }
-        else
-        {
-            await ConfigJobs.RegisterJobsAsync(scope.ServiceProvider);
-        }
+        await ConfigJobs.RegisterJobsAsync(scope.ServiceProvider);
         Console.WriteLine("[INFO] Jobs registrados exitosamente durante el startup");
     }
 }
