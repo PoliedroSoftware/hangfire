@@ -34,6 +34,13 @@ services:
       - "8080:8080"
     environment:
       MYSQL_CONNECTION: "Server=mysql;Port=3306;Database=hangfire;Uid=hangfire;Pwd=hangfire_secret;Allow User Variables=True;Pooling=True;Max Pool Size=200;Connection Lifetime=300;Connection Idle Timeout=60;Connection Timeout=5;Default Command Timeout=60;"
+      # APIs de facturación: se resuelven vía el host (billing-api publica 5001 en el host).
+      # En Linux, extra_hosts mapea host.docker.internal al gateway del host.
+      External__DianresolutionUrl: "http://host.docker.internal:5001/api/v1/dianresolution"
+      External__PendingInvoicesUrl: "http://host.docker.internal:5001/api/v1/invoicespendingwithdetails"
+      External__EmitInvoicesUrl: "http://host.docker.internal:5001/api/v1/billing"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       mysql:
         condition: service_healthy

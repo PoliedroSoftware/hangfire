@@ -33,19 +33,19 @@ No tests, linter, formatter, or typecheck commands exist.
 - **Worker count**: 5
 - **Connection string**: `MYSQL_CONNECTION` env var > `ConnectionStrings:HangfireConnection` in appsettings.json
 - **Dashboard**: `/hangfire` — **no auth** (`DevDashboardAccessFilter` always returns `true`)
-- **Job registration**: At startup, `ConfigJobs.RegisterJobsAsync` fetches clients from `External:ClientsUrl` and registers one recurring job per client: `facturacion-cliente-{id}` at `Cron.MinuteInterval(iterations)`.
+- **Job registration**: At startup, `ConfigJobs.RegisterJobsAsync` fetches the active DIAN resolutions from `External:DianresolutionUrl` and registers one recurring job per resolution: `facturacion-resolucion-{resolutionId}` every `Hangfire:ResolutionIntervalMinutes` (default 5). It also removes legacy `facturacion-cliente-*` jobs and schedules for resolutions that no longer exist.
 
 **Connection string must include** `Pooling=True;Max Pool Size=200;Connection Lifetime=300;Connection Idle Timeout=60;` to avoid pool exhaustion. If using `MYSQL_CONNECTION` env var, add these parameters there too. For local Docker setup, also add `Connection Timeout=5;Default Command Timeout=60;`.
 
-**Job flow**: Recurring job (`PendingInvoicesService.InvoicePendingAsync`) → checks pending invoices → enqueues `BackgroundJob.Enqueue<IInvoicesEmitterBIlling>` to emit.
+**Job flow**: Recurring job (`PendingInvoicesService.InvoicePendingAsync`) → `GET {PendingInvoicesUrl}/{resolutionId}` → if there are pending invoices, enqueues `BackgroundJob.Enqueue<IInvoicesEmitterBIlling>` which posts `{"data":[...]}` to `{EmitInvoicesUrl}/{resolutionId}`. The same `resolutionId` drives the whole flow.
 
 ## External APIs (config key `External:*`)
 
 | Config | Purpose |
 |---|---|
-| `ClientsUrl` | GET list of clients |
-| `PendingInvoicesUrl` | GET pending invoices (Bearer token auth) |
-| `EmitInvoicesUrl` | POST to emit invoices |
+| `DianresolutionUrl` | GET list of active DIAN resolutions (`resolutionId`, `description`, `active`) |
+| `PendingInvoicesUrl` | GET `{PendingInvoicesUrl}/{resolutionId}` → `{success, count, data}` (no auth) |
+| `EmitInvoicesUrl` | POST `{EmitInvoicesUrl}/{resolutionId}` with `{"data":[...]}` → `[{status, message, data}]` |
 
 All HTTP calls include header `X-Environment: production-billing`.
 
