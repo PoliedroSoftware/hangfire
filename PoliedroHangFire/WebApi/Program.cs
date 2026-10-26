@@ -24,8 +24,10 @@ builder.Services.AddSingleton<PoliedroHangFire.Infrastructure.Observability.Hang
 builder.Services.AddHealthChecks()
     .AddTypeActivatedCheck<ExternalServiceHealthCheck>(
         "dian-resolution",
-        args: new object[] { builder.Configuration["External:DianresolutionUrl"]!, "Dian Resolution Service" })
-    .AddCheck<HangfireHealthCheck>("hangfire");
+        null,
+        new[] { "external" },
+        new object[] { builder.Configuration["External:DianresolutionUrl"]!, "Dian Resolution Service" })
+    .AddCheck<HangfireHealthCheck>("hangfire", tags: new[] { "hangfire" });
 
 // Registrar HttpClient para health checks
 builder.Services.AddHttpClient();
@@ -71,8 +73,11 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
     }
 });
 
-// Health check simple (para Docker)
-app.MapHealthChecks("/health/simple");
+// Health check simple (para Docker / liveness): solo dependencias propias, sin servicios externos
+app.MapHealthChecks("/health/simple", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("hangfire")
+});
 
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
@@ -93,8 +98,10 @@ try
 {
     using (var scope = app.Services.CreateScope())
     {
-        await ConfigJobs.RegisterJobsAsync(scope.ServiceProvider);
-        Console.WriteLine("[INFO] Jobs registrados exitosamente durante el startup");
+        var registered = await ConfigJobs.RegisterJobsAsync(scope.ServiceProvider);
+        Console.WriteLine(registered
+            ? "[INFO] Jobs registrados exitosamente durante el startup"
+            : "[WARNING] No se pudieron registrar los jobs: la API de resoluciones DIAN no respondió. Se conservan los jobs existentes y la aplicación continuará ejecutándose.");
     }
 }
 catch (Exception ex)
